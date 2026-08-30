@@ -41,6 +41,10 @@ from .const import (
     MODE_FOLLOW,
 )
 
+# Rendered into the setup form via description_placeholders. hassfest rejects
+# URLs written directly into strings.json, so it has to travel this way.
+LABS_URL = "https://labs.rejseplanen.dk"
+
 _MODE_SELECTOR = selector.SelectSelector(
     selector.SelectSelectorConfig(
         options=[MODE_FOLLOW, MODE_FIXED],
@@ -160,7 +164,10 @@ class RejseplanenConfigFlow(ConfigFlow, domain=DOMAIN):
             {vol.Required(CONF_API_KEY): str, vol.Required(CONF_MODE): _MODE_SELECTOR}
         ).extend(_common_schema(user_input or {}).schema)
         return self.async_show_form(
-            step_id="user", data_schema=schema, errors=errors
+            step_id="user",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={"labs_url": LABS_URL},
         )
 
     @staticmethod
