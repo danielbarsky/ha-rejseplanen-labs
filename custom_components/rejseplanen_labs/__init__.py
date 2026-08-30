@@ -21,6 +21,10 @@ type RejseplanenConfigEntry = ConfigEntry[RejseplanenCoordinator]
 _BASE_PLATFORMS = [Platform.SENSOR, Platform.BUTTON]
 _POSITION_PLATFORMS = [Platform.DEVICE_TRACKER]
 
+# Set up only via config entries; async_setup exists solely to register the
+# refresh service, so hassfest wants this declared explicitly.
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
 _REFRESH_SCHEMA = vol.Schema(
     {vol.Optional(ATTR_CONFIG_ENTRY_ID): vol.All(cv.ensure_list, [cv.string])}
 )
