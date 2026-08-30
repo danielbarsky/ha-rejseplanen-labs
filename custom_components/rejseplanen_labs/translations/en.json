@@ -1,0 +1,84 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "title": "Rejseplanen Labs",
+                "description": "Get a free API key at https://labs.rejseplanen.dk. Choose whether this instance follows a person/tracker or sits at a fixed location. Each update costs API quota, so prefer a longer interval (or on-demand only) and use the refresh button when you actually need fresh data.",
+                "data": {
+                    "api_key": "Labs API key (accessId)",
+                    "mode": "Search centre",
+                    "tracked_entity": "Entity to follow (person / device_tracker)",
+                    "latitude": "Fixed latitude",
+                    "longitude": "Fixed longitude",
+                    "radius": "Search radius",
+                    "max_stops": "Max nearby stops",
+                    "max_departures": "Departures per stop",
+                    "fixed_stops": "Fixed stop IDs (stable sensors)",
+                    "enable_positions": "Enable live vehicle positions",
+                    "scan_interval": "Update interval (seconds)",
+                    "on_demand_only": "Only update on demand (ignore the interval; refresh via the button or the rejseplanen_labs.refresh service)"
+                }
+            }
+        },
+        "error": {
+            "tracked_entity_required": "Pick an entity to follow, or switch to a fixed location.",
+            "coordinates_required": "Enter both latitude and longitude for a fixed location."
+        }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "title": "Rejseplanen Labs options",
+                "data": {
+                    "mode": "Search centre",
+                    "tracked_entity": "Entity to follow (person / device_tracker)",
+                    "latitude": "Fixed latitude",
+                    "longitude": "Fixed longitude",
+                    "radius": "Search radius",
+                    "max_stops": "Max nearby stops",
+                    "max_departures": "Departures per stop",
+                    "fixed_stops": "Fixed stop IDs (stable sensors)",
+                    "enable_positions": "Enable live vehicle positions",
+                    "scan_interval": "Update interval (seconds)",
+                    "on_demand_only": "Only update on demand (ignore the interval; refresh via the button or the rejseplanen_labs.refresh service)"
+                }
+            }
+        },
+        "error": {
+            "tracked_entity_required": "Pick an entity to follow, or switch to a fixed location.",
+            "coordinates_required": "Enter both latitude and longitude for a fixed location."
+        }
+    },
+    "entity": {
+        "sensor": {
+            "nearby": {
+                "name": "Nearby departures"
+            }
+        },
+        "button": {
+            "refresh": {
+                "name": "Refresh departures"
+            }
+        }
+    },
+    "selector": {
+        "mode": {
+            "options": {
+                "follow": "Follow a person / tracker",
+                "fixed": "Fixed location"
+            }
+        }
+    },
+    "services": {
+        "refresh": {
+            "name": "Refresh departures",
+            "description": "Fetch departures immediately, outside the normal update interval. Repeated calls within a short cooldown collapse into a single fetch.",
+            "fields": {
+                "config_entry_id": {
+                    "name": "Instance",
+                    "description": "Which Rejseplanen Labs instance to refresh. Defaults to all of them."
+                }
+            }
+        }
+    }
+}

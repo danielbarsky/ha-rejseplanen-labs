@@ -1,0 +1,15 @@
+refresh:
+  name: Refresh departures
+  description: >-
+    Fetch departures immediately, outside the normal update interval. Repeated
+    calls within a short cooldown collapse into a single fetch, so this is safe
+    to wire to a dashboard tap, a motion sensor, or a zone trigger.
+  fields:
+    config_entry_id:
+      name: Instance
+      description: >-
+        Which Rejseplanen Labs instance to refresh. Defaults to all of them.
+      required: false
+      selector:
+        config_entry:
+          integration: rejseplanen_labs
