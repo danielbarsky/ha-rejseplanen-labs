@@ -26,3 +26,20 @@ jobs:
           # Only relevant when submitting to the HACS default store; this repo
           # is meant to be added as a custom repository.
           ignore: brands
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install aiohttp
+      - name: Run logic tests
+        run: |
+          for t in tests/*.py; do
+            echo "::group::$t"
+            python "$t" || exit 1
+            echo "::endgroup::"
+          done

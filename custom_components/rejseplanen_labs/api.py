@@ -55,10 +55,10 @@ REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=20)
 # Cap concurrent departure-board calls when fanning out over nearby stops so
 # we stay friendly to the Labs quota.
 _MAX_CONCURRENCY = 5
-# When the batched board can't account for a stop we fetch it individually,
-# but only this many per cycle — a bad attribution guess should degrade, not
-# quietly cost the old one-request-per-stop price.
-_MAX_FALLBACKS = 3
+# A stop whose individual board came back genuinely empty isn't re-queried
+# for this long. Bounds the cost of quiet stops at 03:00 without ever leaving
+# one permanently un-fetched.
+_EMPTY_RECHECK_AFTER = timedelta(minutes=10)
 # If multiDepartureBoard errors out, stop trying for this long. An unsupported
 # endpoint then costs one wasted request an hour instead of one per cycle.
 _MULTI_RETRY_AFTER = timedelta(hours=1)
@@ -133,6 +133,11 @@ class RejseplanenLabsClient:
         # observable rather than something you discover when the quota dies.
         self.requests = 0
         self._multi_retry_after: datetime | None = None
+        # stop_id -> don't bother re-fetching before this time (verified empty)
+        self._empty_until: dict[str, datetime] = {}
+        # stopExtIds the last batched board returned that matched no requested
+        # stop. Purely diagnostic -- this is what you need to fix attribution.
+        self._unattributed: list[str] = []
 
     async def _get(self, path: str, params: dict) -> dict:
         """Perform a GET, returning parsed JSON. Raises RejseplanenApiError."""
@@ -228,10 +233,21 @@ class RejseplanenLabsClient:
         )
 
         grouped: dict[str, list[Departure]] = {}
+        unattributed: list[str] = []
         for dep in _parse_departures(payload):
             owner = _attribute_stop(dep.stop_ext_id, ids)
             if owner is not None:
                 grouped.setdefault(owner, []).append(dep)
+            elif dep.stop_ext_id not in unattributed:
+                unattributed.append(dep.stop_ext_id)
+        self._unattributed = unattributed
+        if unattributed:
+            _LOGGER.debug(
+                "multiDepartureBoard returned departures at stopExtIds %s that "
+                "match none of the requested ids %s",
+                unattributed,
+                ids,
+            )
 
         return {
             stop_id: _sorted_departures(deps)[: int(max_departures)]
@@ -245,8 +261,8 @@ class RejseplanenLabsClient:
 
         A single multiDepartureBoard call covers every stop, which is the
         biggest quota saving available here: the previous per-stop fan-out cost
-        one request per stop per cycle. Stops the batch didn't answer for fall
-        back to an individual board, capped at _MAX_FALLBACKS.
+        one request per stop per cycle. Any stop the batch didn't answer for
+        falls back to an individual board.
 
         Stops are mutated in place (and also returned) as before.
         """
@@ -274,20 +290,55 @@ class RejseplanenLabsClient:
             stop.departures = grouped.get(stop.stop_id, [])
 
         missing = [stop for stop in stops if not stop.departures]
-        if missing:
-            # Expected occasionally (a stop really has nothing due at 03:00).
-            # Persistently high counts mean _attribute_stop needs adjusting
-            # against real payloads -- check here first if boards look empty.
+        if not missing:
+            return stops
+
+        if not grouped:
+            # The batch accounted for nothing at all. Either every stop really
+            # is quiet, or attribution is broken -- fetch them all and let the
+            # answer decide. Never truncate this list: doing so starves the
+            # same trailing stops on every single cycle.
+            await self._fill_individually(missing, max_departures)
+            if any(stop.departures for stop in missing):
+                # Individual boards found departures the batch failed to
+                # attribute to any stop. That's the batched board not working.
+                self._disable_multi()
+                _LOGGER.warning(
+                    "multiDepartureBoard returned nothing attributable for %d "
+                    "stops but individual boards found departures -- stop id "
+                    "attribution is wrong. Requested ids %s; board reported "
+                    "departures at stopExtIds %s. Falling back to per-stop "
+                    "boards, retrying the batched call after %s",
+                    len(missing),
+                    [stop.stop_id for stop in missing],
+                    self._unattributed or "(none -- board was empty)",
+                    self._multi_retry_after,
+                )
+            return stops
+
+        # The batch worked for some stops, so the rest are plausibly just
+        # quiet. Confirm individually, then leave verified-empty stops alone
+        # for a while rather than re-asking every cycle.
+        now = datetime.now(_TZ)
+        due = [
+            stop
+            for stop in missing
+            if self._empty_until.get(stop.stop_id, now) <= now
+        ]
+        skipped = len(missing) - len(due)
+        if skipped:
             _LOGGER.debug(
-                "Batched board covered %d/%d stops; fetching %d of the "
-                "remaining %d individually (%s)",
-                len(stops) - len(missing),
-                len(stops),
-                min(len(missing), _MAX_FALLBACKS),
-                len(missing),
-                ", ".join(stop.name for stop in missing),
+                "Skipping %d stop(s) confirmed empty within the last %s",
+                skipped,
+                _EMPTY_RECHECK_AFTER,
             )
-            await self._fill_individually(missing[:_MAX_FALLBACKS], max_departures)
+        if due:
+            await self._fill_individually(due, max_departures)
+            for stop in due:
+                if stop.departures:
+                    self._empty_until.pop(stop.stop_id, None)
+                else:
+                    self._empty_until[stop.stop_id] = now + _EMPTY_RECHECK_AFTER
 
         return stops
 
